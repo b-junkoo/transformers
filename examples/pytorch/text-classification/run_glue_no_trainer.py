@@ -146,6 +146,7 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument("--fp16", type=bool, default=False) 
+    parser.add_argument("--warmup_percent", type=float, default=0.1)
     args = parser.parse_args()
 
     # Sanity checks
@@ -169,9 +170,7 @@ def main():
     args = parse_args()
     
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator()
-    if args.fp16:
-        accelerator.use_fp16
+    accelerator = Accelerator(fp16=args.fp16)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -372,11 +371,12 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     else:
         args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-
+        
+    warmup_steps = math.ceil((args.num_train_epochs * len(train_dataloader))*args.warmup_percent)
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps,
+        num_warmup_steps=warmup_steps,
         num_training_steps=args.max_train_steps,
     )
 
