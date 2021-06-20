@@ -19,6 +19,9 @@ import math
 import os
 import random
 
+import torch
+from torch import nn
+
 import datasets
 from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
@@ -282,7 +285,7 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
-    elif args.task_name is None:
+    elif args.task_name is None and not is_regression:
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
     if label_to_id is not None:
@@ -378,7 +381,7 @@ def main():
     if args.task_name is not None:
         metric = load_metric("glue", args.task_name)
     else:
-        metric = load_metric("accuracy")
+        metric = nn.MSELoss()
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -412,15 +415,13 @@ def main():
                 break
 
         model.eval()
+        losses=[]
         for step, batch in enumerate(eval_dataloader):
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
-            metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
-            )
-
-        eval_metric = metric.compute()
+            rmse = torch.sqrt(metric(predictions, labels))
+            losses.append(rmse)
+        eval_metric = np.mean(losses)
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
