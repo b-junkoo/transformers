@@ -19,9 +19,6 @@ import math
 import os
 import random
 
-import torch
-from torch import nn
-
 import datasets
 from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
@@ -145,8 +142,6 @@ def parse_args():
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
-    parser.add_argument("--fp16", type=bool, default=False) 
-    parser.add_argument("--warmup_percent", type=float, default=0.1)
     args = parser.parse_args()
 
     # Sanity checks
@@ -168,9 +163,9 @@ def parse_args():
 
 def main():
     args = parse_args()
-    
+
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator(fp16=args.fp16)
+    accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -287,7 +282,7 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
-    elif args.task_name is None and not is_regression:
+    elif args.task_name is None and not is_regression :
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
     if label_to_id is not None:
@@ -371,12 +366,11 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     else:
         args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-        
-    warmup_steps = math.ceil((args.num_train_epochs * len(train_dataloader))*args.warmup_percent)
+
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=warmup_steps,
+        num_warmup_steps=args.num_warmup_steps,
         num_training_steps=args.max_train_steps,
     )
 
@@ -384,7 +378,7 @@ def main():
     if args.task_name is not None:
         metric = load_metric("glue", args.task_name)
     else:
-        metric = nn.MSELoss()
+        metric = load_metric("accuracy")
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -418,13 +412,15 @@ def main():
                 break
 
         model.eval()
-        losses=[]
         for step, batch in enumerate(eval_dataloader):
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
-            rmse = torch.sqrt(metric(predictions, batch['labels']))
-            losses.append(rmse)
-        eval_metric = np.mean(losses)
+            metric.add_batch(
+                predictions=accelerator.gather(predictions),
+                references=accelerator.gather(batch["labels"]),
+            )
+
+        eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
