@@ -145,6 +145,7 @@ def parse_args():
     )
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument("--fp16", type=bool, default=False) 
     args = parser.parse_args()
 
     # Sanity checks
@@ -166,9 +167,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
+    if args.fp16:
+        accelerator.use_fp16
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
