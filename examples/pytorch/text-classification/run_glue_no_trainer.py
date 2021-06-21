@@ -351,7 +351,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, betas=(0.9, 0.98))
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
