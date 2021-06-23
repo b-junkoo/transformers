@@ -435,16 +435,16 @@ def main():
                 if epoch_no_improvement == args.patience:
                     print("Early Stop")
                     print("RMSE:", min_loss)
-                    if args.output_dir is not None:
-                        accelerator.wait_for_everyone()
-                        unwrapped_model = accelerator.unwrap_model(model)
-                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-                        already_saved = True
                     break
             else:
                 epoch_no_improvement = 0
                 min_loss = eval_metric
-                              
+                if args.output_dir is not None:
+                    accelerator.wait_for_everyone()
+                    unwrapped_model = accelerator.unwrap_model(model)
+                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                    already_saved = True
+                    
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None and not already_saved:
