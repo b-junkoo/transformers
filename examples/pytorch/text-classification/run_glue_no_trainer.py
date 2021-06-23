@@ -433,6 +433,8 @@ def main():
             elif eval_metric > min_loss:
                 epoch_no_improvement += 1
                 if epoch_no_improvement == args.patience:
+                    print("Early Stop")
+                    print("RMSE:", min_loss)
                     if args.output_dir is not None:
                         accelerator.wait_for_everyone()
                         unwrapped_model = accelerator.unwrap_model(model)
