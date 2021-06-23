@@ -427,10 +427,10 @@ def main():
 
         eval_metric = np.mean(losses)
         # early stopping
-        if args.early_stopping:
-            if epoch == 0:
-                min_loss = eval_metric
-            elif eval_metric > min_loss:
+        if epoch == 0:
+            min_loss = eval_metric
+        if args.early_stopping and completed_steps >= args.num_warmup_steps:
+            if eval_metric > min_loss:
                 epoch_no_improvement += 1
                 if epoch_no_improvement == args.patience:
                     print("Early Stop")
