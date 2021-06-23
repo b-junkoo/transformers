@@ -423,7 +423,7 @@ def main():
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
             loss = torch.sqrt(metric(accelerator.gather(predictions), accelerator.gather(batch["labels"])))
-            losses[batch] = loss                 
+            losses[step] = loss                 
 
         eval_metric = np.mean(losses)
         # early stopping
