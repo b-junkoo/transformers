@@ -185,6 +185,9 @@ def parse_args():
     parser.add_argument(
         "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
     )
+    parser.add_argument("--fp16", type=bool, default=False)
+    parser.add_argument("--patience", type=int, default=3)
+    parser.add_argument("--early_stopping", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -209,7 +212,7 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator()
+    accelerator = Accelerator(fp16=args.fp16)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -464,7 +467,8 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
-
+    already_saved=False
+    epoch_no_improvement=0
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
@@ -497,10 +501,30 @@ def main():
             perplexity = math.exp(torch.mean(losses))
         except OverflowError:
             perplexity = float("inf")
-
+        print("Perplexity:" perplexity)
+        
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
-
-    if args.output_dir is not None:
+        # early stopping
+        if epoch == 0:
+            min_perplexity = perplexity
+        if args.early_stopping and completed_steps >= args.num_warmup_steps:
+            if perplexity > min_perplexity:
+                epoch_no_improvement += 1
+                if epoch_no_improvement == args.patience:
+                    print("Early Stop")
+                    print("Perplexity:", min_perplexity)
+                    break
+            else:
+                epoch_no_improvement = 0
+                min_perplexity = perplexity
+                if args.output_dir is not None:
+                    accelerator.wait_for_everyone()
+                    unwrapped_model = accelerator.unwrap_model(model)
+                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                    already_saved = True
+                    
+        logger.info(f"epoch {epoch}: {eval_metric}")
+    if args.output_dir is not None and not already_saved:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
