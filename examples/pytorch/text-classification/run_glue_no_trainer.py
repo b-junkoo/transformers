@@ -144,6 +144,8 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument("--fp16", type=bool, default=False)
+    parser.add_argument("--patience", type=int, default=3)
+    parser.add_argument("--early_stopping", type=bool, default=False)
     args = parser.parse_args()
 
     # Sanity checks
@@ -396,7 +398,8 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
-
+    epoch_no_improvement = 0
+    already_saved = False
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
@@ -423,32 +426,29 @@ def main():
             losses[batch] = loss                 
 
         eval_metric = np.mean(losses)
+        # early stopping
+        if args.early_stopping:
+            if epoch == 0:
+                min_loss = eval_metric
+            elif eval_metric > min_loss:
+                epoch_no_improvement += 1
+                if epoch_no_improvement == args.patience:
+                    if args.output_dir is not None:
+                        accelerator.wait_for_everyone()
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+                        already_saved = True
+                    break
+            else:
+                epoch_no_improvement = 0
+                min_loss = eval_metric
+                              
         logger.info(f"epoch {epoch}: {eval_metric}")
 
-    if args.output_dir is not None:
+    if args.output_dir is not None and not already_saved:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-
-    if args.task_name == "mnli":
-        # Final evaluation on mismatched validation set
-        eval_dataset = processed_datasets["validation_mismatched"]
-        eval_dataloader = DataLoader(
-            eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
-        )
-        eval_dataloader = accelerator.prepare(eval_dataloader)
-
-        model.eval()
-        for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
-            predictions = outputs.logits.argmax(dim=-1)
-            metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
-            )
-
-        eval_metric = metric.compute()
-        logger.info(f"mnli-mm: {eval_metric}")
 
 
 if __name__ == "__main__":
