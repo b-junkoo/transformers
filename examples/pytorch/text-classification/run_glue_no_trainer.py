@@ -19,6 +19,7 @@ import math
 import os
 import random
 
+import numpy as np
 import datasets
 from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
@@ -133,7 +134,7 @@ def parse_args():
     parser.add_argument(
         "--lr_scheduler_type",
         type=SchedulerType,
-        default="linear",
+        default="constant_with_warmup",
         help="The scheduler type to use.",
         choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
     )
@@ -379,7 +380,8 @@ def main():
     if args.task_name is not None:
         metric = load_metric("glue", args.task_name)
     else:
-        metric = load_metric("accuracy")
+        import torch
+        metric = torch.nn.MSELoss()
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -413,15 +415,14 @@ def main():
                 break
 
         model.eval()
+        losses = np.zeros(len(eval_dataloader))
         for step, batch in enumerate(eval_dataloader):
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
-            metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
-            )
+            loss = torch.sqrt(metric(accelerator.gather(predictions), accelerator.gather(batch["labels"]))
+            losses[batch] = loss                 
 
-        eval_metric = metric.compute()
+        eval_metric = np.mean(losses)
         logger.info(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
