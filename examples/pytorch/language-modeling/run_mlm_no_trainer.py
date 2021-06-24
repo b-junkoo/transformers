@@ -501,7 +501,6 @@ def main():
             perplexity = math.exp(torch.mean(losses))
         except OverflowError:
             perplexity = float("inf")
-        print("Perplexity:" perplexity)
         
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
         # early stopping
