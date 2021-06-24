@@ -522,7 +522,6 @@ def main():
                     unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
                     already_saved = True
                     
-        logger.info(f"epoch {epoch}: {eval_metric}")
     if args.output_dir is not None and not already_saved:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
