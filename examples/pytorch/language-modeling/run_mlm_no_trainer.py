@@ -503,26 +503,8 @@ def main():
             perplexity = float("inf")
         
         logger.info(f"epoch {epoch}: perplexity: {perplexity}")
-        # early stopping
-        if epoch == 0:
-            min_perplexity = perplexity
-        if args.early_stopping and completed_steps >= args.num_warmup_steps:
-            if perplexity > min_perplexity:
-                epoch_no_improvement += 1
-                if epoch_no_improvement == args.patience:
-                    print("Early Stop")
-                    print("Perplexity:", min_perplexity)
-                    break
-            else:
-                epoch_no_improvement = 0
-                min_perplexity = perplexity
-                if args.output_dir is not None:
-                    accelerator.wait_for_everyone()
-                    unwrapped_model = accelerator.unwrap_model(model)
-                    unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
-                    already_saved = True
                     
-    if args.output_dir is not None and not already_saved:
+    if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
