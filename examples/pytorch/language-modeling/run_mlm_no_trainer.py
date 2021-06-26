@@ -186,8 +186,6 @@ def parse_args():
         "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
     )
     parser.add_argument("--fp16", type=bool, default=False)
-    parser.add_argument("--patience", type=int, default=3)
-    parser.add_argument("--early_stopping", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -467,19 +465,18 @@ def main():
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
-    already_saved=False
-    epoch_no_improvement=0
+
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
+            optimizer.zero_grad()
             accelerator.backward(loss)
             if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
                 optimizer.step()
                 lr_scheduler.step()
-                optimizer.zero_grad()
                 progress_bar.update(1)
                 completed_steps += 1
 
@@ -507,7 +504,8 @@ def main():
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+        torch.save(unwrapped_model.state_dict(), args.output_dir)
+#         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
 
 if __name__ == "__main__":
