@@ -504,8 +504,8 @@ def main():
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
-        torch.save(unwrapped_model.state_dict(), args.output_dir)
-#         unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+#         torch.save(unwrapped_model.state_dict(), args.output_dir)
+        unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
 
 if __name__ == "__main__":
